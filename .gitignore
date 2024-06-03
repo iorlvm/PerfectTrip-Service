@@ -1,3 +1,6 @@
+# private data
+db.properties
+
 # Compiled class file
 *.class
  
