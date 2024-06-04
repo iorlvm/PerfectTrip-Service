@@ -7,7 +7,7 @@ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
-@ComponentScan({"com.tibame.controller"})
+@ComponentScan({"com.tibame.example.controller"})
 @EnableWebMvc
 public class WebConfig implements WebMvcConfigurer {
     @Override

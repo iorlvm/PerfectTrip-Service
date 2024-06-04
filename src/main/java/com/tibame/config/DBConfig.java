@@ -1,5 +1,7 @@
 package com.tibame.config;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
@@ -9,14 +11,13 @@ import org.springframework.orm.hibernate5.HibernateTransactionManager;
 import org.springframework.orm.hibernate5.LocalSessionFactoryBean;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 
+import javax.sql.DataSource;
 import java.util.Properties;
-
-import static org.hibernate.cfg.Environment.*;
 
 @Configuration
 @PropertySource("classpath:db.properties")
 @EnableTransactionManagement
-@ComponentScan({"com.tibame.service", "com.tibame.repository"})
+@ComponentScan({"com.tibame.example.service", "com.tibame.example.repository"})
 public class DBConfig {
     @Value("${db.driver}")
     private String driver;
@@ -27,37 +28,42 @@ public class DBConfig {
     @Value("${db.password}")
     private String password;
 
-    @Value("${connectionPool.min_size}")
-    private String poolMinSize;
-    @Value("${connectionPool.max_size}")
-    private String poolMaxSize;
-    @Value("${connectionPool.timeout}")
-    private String poolTimeout;
+    // HikariCP settings
+    private static final int MAX_POOL_SIZE = 10;
+    private static final int MIN_IDLE = 5;
+    private static final long IDLE_TIMEOUT = 30000;
+    private static final long CONNECTION_TIMEOUT = 20000;
+    private static final long MAX_LIFETIME = 1800000;
 
     @Bean
-    public LocalSessionFactoryBean getSessionFactory() {
+    public DataSource dataSource() {
+        HikariConfig hikariConfig = new HikariConfig();
+        hikariConfig.setDriverClassName(driver);
+        hikariConfig.setJdbcUrl(url);
+        hikariConfig.setUsername(username);
+        hikariConfig.setPassword(password);
+
+        hikariConfig.setMaximumPoolSize(MAX_POOL_SIZE);
+        hikariConfig.setMinimumIdle(MIN_IDLE);
+        hikariConfig.setIdleTimeout(IDLE_TIMEOUT);
+        hikariConfig.setConnectionTimeout(CONNECTION_TIMEOUT);
+        hikariConfig.setMaxLifetime(MAX_LIFETIME);
+
+        return new HikariDataSource(hikariConfig);
+    }
+
+    @Bean
+    public LocalSessionFactoryBean getSessionFactory(DataSource dataSource) {
         LocalSessionFactoryBean factoryBean = new LocalSessionFactoryBean();
-
-        Properties props = new Properties();
-
-        props.put(DRIVER, driver);
-        props.put(URL, url);
-        props.put(USER, username);
-        props.put(PASS, password);
-
-        props.put(C3P0_MIN_SIZE, poolMinSize);
-        props.put(C3P0_MAX_SIZE, poolMaxSize);
-        props.put(C3P0_TIMEOUT, poolTimeout);
-
-        factoryBean.setHibernateProperties(props);
+        factoryBean.setDataSource(dataSource);
         factoryBean.setPackagesToScan("com.tibame.entity");
         return factoryBean;
     }
 
     @Bean
-    public HibernateTransactionManager getTransactionManager() {
+    public HibernateTransactionManager getTransactionManager(LocalSessionFactoryBean sessionFactoryBean) {
         HibernateTransactionManager transactionManager = new HibernateTransactionManager();
-        transactionManager.setSessionFactory(getSessionFactory().getObject());
+        transactionManager.setSessionFactory(sessionFactoryBean.getObject());
         return transactionManager;
     }
 }
