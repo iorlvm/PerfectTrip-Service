@@ -37,6 +37,3 @@ public class ExampleServiceImpl implements ExampleService {
         return Result.ok(user);
     }
 }
-
-
-

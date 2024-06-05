@@ -19,6 +19,7 @@
 
         <spring.version>5.2.25.RELEASE</spring.version>
         <hibernate.version>5.2.11.Final</hibernate.version>
+        <security.version>5.1.5.RELEASE</security.version>
     </properties>
 
     <dependencies>
@@ -58,6 +59,24 @@
             <groupId>org.springframework</groupId>
             <artifactId>spring-test</artifactId>
             <version>${spring.version}</version>
+        </dependency>
+
+
+        <!-- JAXB dependencies -->
+        <dependency>
+            <groupId>javax.xml.bind</groupId>
+            <artifactId>jaxb-api</artifactId>
+            <version>2.3.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.glassfish.jaxb</groupId>
+            <artifactId>jaxb-runtime</artifactId>
+            <version>2.3.1</version>
+        </dependency>
+        <dependency>
+            <groupId>javax.activation</groupId>
+            <artifactId>activation</artifactId>
+            <version>1.1.1</version>
         </dependency>
 
 
@@ -118,6 +137,7 @@
     <build>
         <finalName>perfecttrip_service</finalName>
         <plugins>
+            <!--無法使用這個東西啟動，請使用Tomcat 9.0.89啟動  沒有的話請找組長拿-->
             <plugin>
                 <groupId>org.apache.tomcat.maven</groupId>
                 <artifactId>tomcat7-maven-plugin</artifactId>
