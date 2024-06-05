@@ -10,6 +10,7 @@ import java.sql.Timestamp;
 @Entity
 @Table(name = "tb_example")
 public class ExampleEntity implements Serializable {
+    private static final long serialVersionUID = 1L;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -4,15 +4,21 @@ import com.tibame.dto.Result;
 import com.tibame.entity.ExampleEntity;
 import com.tibame.example.repository.ExampleDao;
 import com.tibame.example.service.ExampleService;
+import com.tibame.utils.redis.CacheClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class ExampleServiceImpl implements ExampleService {
     @Autowired
     private ExampleDao userDao;
+
+    @Autowired
+    private CacheClient cacheClient;
 
     @Override
     public Result getAll() {
@@ -24,12 +30,22 @@ public class ExampleServiceImpl implements ExampleService {
             return Result.fail("出事啦！用戶資料被人全刪掉了啦！");
         }
         // 回傳值是List的情況 (前端有資料總筆數比較好計算分頁切換)
-        return Result.ok(allUsers, (long)allUsers.size());
+        return Result.ok(allUsers, (long) allUsers.size());
     }
 
     @Override
     public Result getById(Long id) {
-        ExampleEntity user = userDao.findById(id);
+//        ExampleEntity user = userDao.findById(id);
+        // Redis緩存工具測試
+        ExampleEntity user = cacheClient.queryWithMutex(
+                "cache:user:",
+                "lock:user:",
+                id,
+                ExampleEntity.class,
+                60L,
+                TimeUnit.SECONDS,
+                userDao::findById
+        );
         if (user == null) {
             return Result.fail("找不到該用戶");
         }

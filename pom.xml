@@ -19,7 +19,6 @@
 
         <spring.version>5.2.25.RELEASE</spring.version>
         <hibernate.version>5.2.11.Final</hibernate.version>
-        <security.version>5.1.5.RELEASE</security.version>
     </properties>
 
     <dependencies>
@@ -62,7 +61,7 @@
         </dependency>
 
 
-        <!-- JAXB dependencies -->
+        <!-- JAXB dependencies for java 9以上的依賴 -->
         <dependency>
             <groupId>javax.xml.bind</groupId>
             <artifactId>jaxb-api</artifactId>
@@ -101,12 +100,29 @@
             <version>4.0.3</version>
         </dependency>
 
+        <!-- Redis -->
+        <dependency>
+            <groupId>org.springframework.data</groupId>
+            <artifactId>spring-data-redis</artifactId>
+            <version>2.7.2</version>
+        </dependency>
+        <dependency>
+            <groupId>redis.clients</groupId>
+            <artifactId>jedis</artifactId>
+            <version>3.0.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
+            <version>2.11.1</version>
+        </dependency>
+
 
         <!-- Jackson for JSON handling -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>2.13.0</version>
+            <version>2.13.3</version>
         </dependency>
 
         <!-- lombok 覺得落落長getter setter很礙眼的救星 -->
@@ -137,7 +153,8 @@
     <build>
         <finalName>perfecttrip_service</finalName>
         <plugins>
-            <!--無法使用這個東西啟動，請使用Tomcat 9.0.89啟動  沒有的話請找組長拿-->
+            <!-- 無法使用這個東西啟動時，請使用【Tomcat 9.0.89】啟動 -->
+            <!-- 一定一定一定要注意專案的Java版本配置，包含Tomcat的JRE-->
             <plugin>
                 <groupId>org.apache.tomcat.maven</groupId>
                 <artifactId>tomcat7-maven-plugin</artifactId>

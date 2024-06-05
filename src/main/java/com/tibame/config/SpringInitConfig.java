@@ -54,7 +54,7 @@ public class SpringInitConfig extends AbstractDispatcherServletInitializer {
 //    @Override
 //    protected Class<?>[] getRootConfigClasses() {
 //        // 加載Spring容器配置
-//        return new Class[]{DBConfig.class, SecurityConfig.class};
+//        return new Class[]{DBConfig.class};
 //    }
 //
 //    @Override
