@@ -1,6 +1,5 @@
 package com.tibame.utils.redis;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tibame.utils.basic.JSONUtil;
 import com.tibame.utils.basic.StrUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -35,10 +34,7 @@ public class CacheClient {
      * @param unit  時間單位
      */
     public void set(String key, Object value, Long time, TimeUnit unit) {
-        System.out.println(JSONUtil.toJsonStr(value));
         stringRedisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(value), time, unit);
-        String s = stringRedisTemplate.opsForValue().get(key);
-        System.out.println(s);
     }
 
     /**
