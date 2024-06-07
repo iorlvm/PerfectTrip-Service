@@ -38,6 +38,14 @@
             <version>${spring.version}</version>
         </dependency>
 
+        <!-- Spring context -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+            <version>${spring.version}</version>
+        </dependency>
+
+
         <!-- Spring ORM -->
         <dependency>
             <groupId>org.springframework</groupId>

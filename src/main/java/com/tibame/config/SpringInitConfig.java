@@ -29,7 +29,7 @@ public class SpringInitConfig extends AbstractDispatcherServletInitializer {
     protected WebApplicationContext createRootApplicationContext() {
         // 加載Spring容器配置
         AnnotationConfigWebApplicationContext context = new AnnotationConfigWebApplicationContext();
-        context.register(DBConfig.class);
+        context.register(AppConfig.class);
         return context;
     }
 

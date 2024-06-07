@@ -56,15 +56,26 @@ public class JSONUtil {
     }
 
 
+    /**
+     * 將傳入的物件轉換成Json字串
+     * @param obj 要被轉換的物件
+     * @return 轉換後的Json字串
+     */
     public static String toJsonStr(Object obj) {
         try {
             return objectMapper.writeValueAsString(obj);
         } catch (JsonProcessingException e) {
-            e.printStackTrace();
             throw new RuntimeException(e);
         }
     }
 
+    /**
+     * 將Json字串轉為物件
+     * @param json Json格式的字串
+     * @param type 指定要轉換的型態
+     * @return 轉換後的物件
+     * @param <R> 回傳的型態 根據type決定
+     */
     public static <R> R toBean(String json, Class<R> type) {
         try {
             return objectMapper.readValue(json, type);
@@ -73,6 +84,13 @@ public class JSONUtil {
         }
     }
 
+    /**
+     * 將物件轉為另一個型態的物件 (實際上應該是LinkedHashMap物件)
+     * @param data LinkedHashMap物件
+     * @param type 指定要轉換的型態
+     * @return 轉換後的物件
+     * @param <R> 回傳的型態 根據type決定
+     */
     public static <R> R toBean(Object data, Class<R> type) {
         return objectMapper.convertValue(data, type);
     }

@@ -1,7 +1,6 @@
 package com.tibame.utils.redis;
 
 import com.tibame.utils.basic.JSONUtil;
-import com.tibame.utils.basic.StrUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
@@ -75,34 +74,30 @@ public class CacheClient {
             while (true) {
                 // 從Redis查詢緩存
                 String json = stringRedisTemplate.opsForValue().get(key);
-                // 存在 直接返回
-                if (StrUtil.isNotBlank(json)) {
+                if (json != null && !json.trim().isEmpty()) {
+                    // 資料存在於Redis中, 將結果直接返回
                     return JSONUtil.toBean(json, type);
-                }
-                if (json != null) {
-                    // 表示Redis查詢到東西  但是查到的東西是""
+                } else if ("".equals(json)) {
+                    // 查到的東西是"", 表示目前SQL中沒有這筆資料
                     return null;
                 }
 
-                // 緩存重建:
-                // 獲取互斥鎖
+                // 緩存重建: 獲取互斥鎖
                 if (!tryLock(lockKey)) {
                     // 鎖定失敗: 休眠一段時間重試
                     Thread.sleep(50);
-                    // 原本是使用遞迴  但覺得會可能造成棧溢出  改成while自旋
+                    // 原本是使用遞迴  但覺得會可能造成棧溢出  改成while自旋 (感覺後面還可以增加重試上限避免死鎖)
                 } else {
-                    // 二次確認是否有其他人已經重建完緩存
-                    // 如果有其他人已經重建緩存 回傳重建後緩存並解鎖
-                    // 兩個重複的程式碼寫在一起讓我看的好啊雜  但不這樣寫又沒辦法達成想要的效果
+                    // 成功獲取互斥鎖: 二次確認是否有其他人已經重建完緩存
+                    // 如果有其他人已經重建緩存 回傳重建後緩存並解鎖 (兩段幾乎一樣的程式碼看起來好煩躁)
                     json = stringRedisTemplate.opsForValue().get(key);
-                    // 存在 直接返回
-                    if (StrUtil.isNotBlank(json)) {
-                        unlock(lockKey);
+                    if (json != null && !json.trim().isEmpty()) {
+                        // 資料存在於Redis中  將結果直接返回
+                        unlock(lockKey);  // 手動釋放鎖 (沒解10秒後鎖也會自動失效, 但還是要記得解鎖)
                         return JSONUtil.toBean(json, type);
-                    }
-                    if (json != null) {
-                        // 表示Redis查詢到東西  但是查到的東西是""
-                        unlock(lockKey);
+                    } else if ("".equals(json)) {
+                        // 查到的東西是"", 表示目前SQL中沒有這筆資料
+                        unlock(lockKey);  // 手動釋放鎖 (沒解10秒後鎖也會自動失效, 但還是要記得解鎖)
                         return null;
                     }
                     break;
@@ -113,11 +108,11 @@ public class CacheClient {
         }
 
         try {
-            // 鎖獲取成功 且二次確認數據不存在  執行緩存重建  下方邏輯基本與緩存穿透相同 只新增回傳以前釋放互斥鎖
-            // 不存在 去SQL查詢 並寫入Redis
+            // 鎖獲取成功 且二次確認數據不存在
+            // 執行緩存重建: 去SQL查詢 並寫入Redis
             R r = dbFallback.apply(id);
             if (r == null) {
-                // 還是不存在 將空值寫入Redis 返回null
+                // 資料庫中不存在這筆資料 將空值寫入Redis 返回null
                 this.set(key, "", time, unit);
                 return null;
             }
@@ -126,7 +121,8 @@ public class CacheClient {
             // 返回查詢結果
             return r;
         } finally {
-            // 釋放互斥鎖
+            // 釋放互斥鎖 (這裡才可以用finally釋放鎖)
+            // 上方用finally釋放的話, 會變成一獲得鎖就直接釋放
             unlock(lockKey);
         }
     }
@@ -153,7 +149,7 @@ public class CacheClient {
         // 從Redis查詢緩存
         String json = stringRedisTemplate.opsForValue().get(key);
         // 不存在預先存入的資料(表示非活動商店) 直接返回null
-        if (StrUtil.isBlank(json)) {
+        if (json == null || json.trim().isEmpty()) {
             return null;
         }
 

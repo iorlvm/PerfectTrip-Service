@@ -10,11 +10,7 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 import javax.sql.DataSource;
 
-@Configuration
-@PropertySource("classpath:db.properties")
 @EnableTransactionManagement
-@ComponentScan({"com.tibame.utils", "com.tibame.example.service", "com.tibame.example.repository"})
-@Import({RedisConfig.class})
 public class DBConfig {
     @Value("${db.driver}")
     private String driver;
