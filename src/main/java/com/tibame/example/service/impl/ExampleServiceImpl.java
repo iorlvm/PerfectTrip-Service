@@ -6,9 +6,10 @@ import com.tibame.example.repository.ExampleDao;
 import com.tibame.example.service.ExampleService;
 import com.tibame.utils.redis.CacheClient;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
-import javax.annotation.Resource;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -19,6 +20,9 @@ public class ExampleServiceImpl implements ExampleService {
 
     @Autowired
     private CacheClient cacheClient;
+
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
 
     @Override
     public Result getAll() {
@@ -35,7 +39,6 @@ public class ExampleServiceImpl implements ExampleService {
 
     @Override
     public Result getById(Long id) {
-//        ExampleEntity user = userDao.findById(id);
         // Redis緩存工具測試
         ExampleEntity user = cacheClient.queryWithMutex(
                 "cache:user:",
@@ -51,5 +54,49 @@ public class ExampleServiceImpl implements ExampleService {
         }
         // 回傳值是單一物件的情況
         return Result.ok(user);
+    }
+
+    @Override
+    public Result create(ExampleEntity user) {
+        if (user == null || StringUtils.isEmpty(user.getPhone())) {
+            return Result.fail("user或是phone不得為空");
+        }
+        if (userDao.findByPhone(user.getPhone()) != null) {
+            return Result.fail("電話號碼重複");
+        }
+        user.setId(null);
+        if (userDao.create(user)) {
+            return Result.ok();
+        } else {
+            return Result.fail("新增失敗, 請檢查傳入的數值格式是否正確");
+        }
+    }
+
+    @Override
+    public Result deleteById(Long id) {
+        if (id == null) {
+            return Result.fail("ID不得為空");
+        }
+
+        if (userDao.deleteById(id)) {
+            stringRedisTemplate.delete("cache:user:" + id);
+            return Result.ok();
+        } else {
+            return Result.fail("刪除失敗, 請檢查傳入的數值是否正確");
+        }
+    }
+
+    @Override
+    public Result update(ExampleEntity user) {
+        if (user == null || user.getId() == null) {
+            return Result.fail("用戶或用戶ID不得為空");
+        }
+
+        if (userDao.update(user)) {
+            stringRedisTemplate.delete("cache:user:" + user.getId());
+            return Result.ok();
+        } else {
+            return Result.fail("更新失敗, 請檢查傳入的數值格式是否正確");
+        }
     }
 }

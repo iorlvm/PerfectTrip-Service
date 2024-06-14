@@ -1,6 +1,7 @@
 package com.tibame.example.controller;
 
 import com.tibame.dto.Result;
+import com.tibame.entity.ExampleEntity;
 import com.tibame.example.service.ExampleService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -25,5 +26,20 @@ public class ExampleController {
     @GetMapping("/{id}")
     public Result getUserById(@PathVariable Long id) {
         return exampleService.getById(id);
+    }
+
+    @PostMapping
+    public Result createUser(@RequestBody ExampleEntity user) {
+        return exampleService.create(user);
+    }
+
+    @DeleteMapping("/{id}")
+    public Result deleteUserById(@PathVariable Long id) {
+        return exampleService.deleteById(id);
+    }
+
+    @PutMapping
+    public Result updateUser(@RequestBody ExampleEntity user) {
+        return exampleService.update(user);
     }
 }

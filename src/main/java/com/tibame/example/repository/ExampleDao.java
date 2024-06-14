@@ -8,4 +8,12 @@ public interface ExampleDao {
     ExampleEntity findById(Long id);
 
     List<ExampleEntity> findAll();
+
+    ExampleEntity findByPhone(String phone);
+
+    public boolean create(ExampleEntity exampleEntity);
+
+    boolean deleteById(Long id);
+
+    boolean update(ExampleEntity exampleEntity);
 }

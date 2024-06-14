@@ -2,12 +2,21 @@ package com.tibame.config;
 
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.FilterType;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
-@ComponentScan({"com.tibame.example.controller"})
+@ComponentScan(
+        value = "com.tibame",
+        includeFilters = @ComponentScan.Filter(
+                type = FilterType.ANNOTATION,
+                classes = Controller.class
+        )
+)
 @EnableWebMvc
 public class WebConfig implements WebMvcConfigurer {
     @Override
@@ -15,5 +24,13 @@ public class WebConfig implements WebMvcConfigurer {
         // 靜態資源配置  之後要修改路徑
         registry.addResourceHandler("/resources/**")
                 .addResourceLocations("/resources/");
+    }
+
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        // 跨域請求設定 未來確定規格後要修正
+        registry.addMapping("/**")
+                .allowedMethods("GET", "POST", "PUT", "DELETE")
+                .allowedHeaders("*");
     }
 }
