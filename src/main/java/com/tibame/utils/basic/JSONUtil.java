@@ -18,6 +18,7 @@ import java.time.ZoneOffset;
 
 
 // 嘗試復刻JSONUtil的toJsonStr跟toBean功能
+// 感覺不夠嚴謹 但for CacheClient使用 目前是OK的
 public class JSONUtil {
     private final static ObjectMapper objectMapper;
 
@@ -62,6 +63,8 @@ public class JSONUtil {
      * @return 轉換後的Json字串
      */
     public static String toJsonStr(Object obj) {
+        if (obj instanceof String) return (String) obj;
+
         try {
             return objectMapper.writeValueAsString(obj);
         } catch (JsonProcessingException e) {
