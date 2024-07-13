@@ -2,7 +2,7 @@ package com.tibame.example.service.impl;
 
 import com.tibame.dto.Result;
 import com.tibame.entity.ExampleEntity;
-import com.tibame.example.repository.ExampleDao;
+import com.tibame.example.dao.ExampleDao;
 import com.tibame.example.service.ExampleService;
 import com.tibame.utils.redis.CacheClient;
 import org.springframework.beans.factory.annotation.Autowired;

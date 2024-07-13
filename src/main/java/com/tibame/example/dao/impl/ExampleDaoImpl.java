@@ -1,6 +1,6 @@
-package com.tibame.example.repository.impl;
+package com.tibame.example.dao.impl;
 
-import com.tibame.example.repository.ExampleDao;
+import com.tibame.example.dao.ExampleDao;
 import com.tibame.entity.ExampleEntity;
 import org.hibernate.SessionFactory;
 import org.hibernate.query.Query;

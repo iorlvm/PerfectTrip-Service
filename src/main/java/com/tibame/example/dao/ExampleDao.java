@@ -1,4 +1,4 @@
-package com.tibame.example.repository;
+package com.tibame.example.dao;
 
 import com.tibame.entity.ExampleEntity;
 
