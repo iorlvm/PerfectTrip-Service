@@ -1,5 +1,6 @@
 package com.tibame.image.controller;
 
+import com.tibame.dto.ImageUploadRequest;
 import com.tibame.dto.Result;
 import com.tibame.entity.Image;
 import com.tibame.image.service.ImageService;
@@ -11,7 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-
+import static com.tibame.utils.redis.RedisConstants.CACHE_IMG_SIZE;
 
 @RestController
 @RequestMapping("/image")
@@ -31,29 +32,21 @@ public class ImageController {
     }
 
     @PostMapping
-    public Result handleFileUpload(
-            @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "comment", required = false, defaultValue = "") String comment,
-            @RequestParam(value = "cache", required = false, defaultValue = "auto") String cacheEnabled
-    ) {
-        if (file.isEmpty()) return Result.fail("沒有上傳任何檔案");
+    public Result handleFileUpload(ImageUploadRequest imageUploadRequest) {
+        try {
+            // 將上傳的檔案處理成需要的格式
+            Image image = imageService.upload(imageUploadRequest);
 
-        // 將上傳的檔案處理成需要的格式
-        Image image = imageService.upload(file);
-        if (image == null) return Result.fail("不符合規定的檔案類型");
-
-        // 將其他參數設定進去
-        image.setComment(!comment.isEmpty() ? comment : null);
-
-        // 是否開啟圖片緩存機制 (預設為auto, 檔案大小在50kb以下會開啟圖片緩存)
-        if ("y".equals(cacheEnabled)) {
-            image.setCacheEnabled(true);
-        } else if ("n".equals(cacheEnabled)) {
-            image.setCacheEnabled(false);
+            String url = "image/" + imageService.save(image).getId();
+            return Result.ok(url);
+        }catch (IllegalArgumentException e) {
+            // 接收imageService拋出的異常訊息
+            return Result.fail("上傳失敗：" + e.getMessage());
+        } catch (Exception e) {
+            // TODO: 考慮是否要做log處理
+            e.printStackTrace();
+            return Result.fail("上傳失敗：系統錯誤");
         }
-
-        imageService.save(image);
-        return Result.ok();
     }
 
     @DeleteMapping("/{id}")

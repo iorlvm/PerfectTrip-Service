@@ -63,6 +63,24 @@ public class RedisConfig {
     }
 
     @Bean
+    public RedisTemplate<String, byte[]> redisTemplateForImage(RedisConnectionFactory factory) {
+        // for 圖片緩存使用的序列化器
+        RedisTemplate<String, byte[]> redisTemplate = new RedisTemplate<>();
+        redisTemplate.setConnectionFactory(factory);
+
+        // Key 和 HashKey 使用 String 序列化
+        redisTemplate.setKeySerializer(RedisSerializer.string());
+        redisTemplate.setHashKeySerializer(RedisSerializer.string());
+
+        // Value 和 HashValue 使用 byteArray 序列化
+        redisTemplate.setValueSerializer(RedisSerializer.byteArray());
+        redisTemplate.setHashValueSerializer(RedisSerializer.byteArray());
+
+        return redisTemplate;
+    }
+
+
+    @Bean
     public StringRedisTemplate stringRedisTemplate(RedisConnectionFactory factory) {
         StringRedisTemplate redisTemplate = new StringRedisTemplate();
         redisTemplate.setConnectionFactory(factory);
