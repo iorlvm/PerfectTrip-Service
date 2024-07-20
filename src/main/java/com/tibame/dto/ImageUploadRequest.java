@@ -12,6 +12,7 @@ public class ImageUploadRequest {
     private MultipartFile file;
     private String comment;
     private Boolean cacheEnabled;
+    private Boolean resizeEnabled;
     private Integer width;
     private Integer height;
 }
