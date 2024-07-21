@@ -68,7 +68,8 @@ public class ImageCacheClient {
      */
     public void setWithLogicExpire(String dataKey, String expireKey, String typeKey, byte[] data, String mimetype, Long time, TimeUnit unit) {
         LocalDateTime expireTime = LocalDateTime.now().plusSeconds(unit.toSeconds(time));
-        // TODO: 優化成具有原子性的操作 (使用lua腳本?)
+        // TODO: 優化成具有原子性的操作 (採到坑了, 因為不同實例無法進行原子性的事務管理 需要程式重構)
+        // 解法: 全部轉成bytes[]
         redisTemplateForImage.opsForValue().set(dataKey, data);
         stringRedisTemplate.opsForValue().set(typeKey, mimetype);
         stringRedisTemplate.opsForValue().set(expireKey, String.valueOf(expireTime));
@@ -89,9 +90,10 @@ public class ImageCacheClient {
      * @return 查詢結果
      */
     public Image queryWithMutexAndLogicExpire(String keyPrefix, String lockPrefix, Long id, Long time, TimeUnit unit, Function<Long, Image> dbFallback) {
-        String dataKey = keyPrefix + "data:" + id;
-        String expireKey = keyPrefix + "expire:" + id;
-        String typeKey = keyPrefix + "type:" + id;
+        String key = keyPrefix + id;
+        String dataKey = key + ":data";
+        String expireKey = key + ":expire";
+        String typeKey = key + ":type";
         String lockKey = lockPrefix + id;
 
         byte[] data = redisTemplateForImage.opsForValue().get(dataKey);
@@ -184,11 +186,10 @@ public class ImageCacheClient {
             if (expireTime.isBefore(LocalDateTime.now())) {
                 // 資料過期 嘗試獲取同步鎖 開啟新執行緒去更新圖片
                 if (tryLock(lockKey)) {
-                    CACHE_REBUILD_EXECUTOR.submit(() -> {
+//                    CACHE_REBUILD_EXECUTOR.submit(() -> {  // TODO: 理解出問題的原因 (其實不開執行緒執行緩存更新也不是甚麼大問題, 但還是想知道為什麼跟怎麼解決)
                         try {
                             // 查詢資料庫
-                            Image image = dbFallback.apply(id);
-
+                            Image image = dbFallback.apply(id); // TODO: 這裡出問題 也許是開執行緒影響事務管理的因素? (PS: 不開啟新執行緒可以正常執行)
                             // 根據查詢結果設計對應的處理方式
                             if (image == null) {
                                 // 查詢不到圖片
@@ -213,7 +214,7 @@ public class ImageCacheClient {
                         } finally {
                             unlock(lockKey);
                         }
-                    });
+//                    });   // TODO: 上面註解掉程式碼的對應括弧 (標記用)
                 }
             }
 
