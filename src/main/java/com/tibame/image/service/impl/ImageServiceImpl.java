@@ -5,6 +5,7 @@ import com.tibame.entity.Image;
 import com.tibame.image.dao.ImageDao;
 import com.tibame.image.service.ImageService;
 import com.tibame.utils.basic.ImageUtils;
+import com.tibame.utils.redis.ImageCacheClient;
 import com.tibame.utils.redis.RedisIdWorker;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -15,8 +16,9 @@ import org.springframework.web.multipart.MultipartFile;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
-import static com.tibame.utils.redis.RedisConstants.CACHE_IMG_SIZE;
+import static com.tibame.utils.redis.RedisConstants.*;
 
 @Service
 @Transactional
@@ -26,10 +28,19 @@ public class ImageServiceImpl implements ImageService {
     @Autowired
     private RedisIdWorker idWorker;
 
+    @Autowired
+    private ImageCacheClient imageCacheClient;
+
     @Override
     public Image findById(Long id) {
-        // TODO: 圖片緩存
-        return imageDao.findById(id);
+        return imageCacheClient.queryWithMutexAndLogicExpire(
+                CACHE_IMG,
+                LOCK_IMG,
+                id,
+                CACHE_IMG_TTL,
+                TimeUnit.SECONDS,
+                imageDao::findById
+        );
     }
 
     @Override
