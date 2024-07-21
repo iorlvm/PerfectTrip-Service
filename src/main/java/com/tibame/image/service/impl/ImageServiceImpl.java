@@ -15,7 +15,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
-import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 import static com.tibame.utils.redis.RedisConstants.*;
@@ -27,12 +26,14 @@ public class ImageServiceImpl implements ImageService {
     private ImageDao imageDao;
     @Autowired
     private RedisIdWorker idWorker;
-
     @Autowired
     private ImageCacheClient imageCacheClient;
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
 
     @Override
     public Image findById(Long id) {
+        // 圖片緩存
         return imageCacheClient.queryWithMutexAndLogicExpire(
                 CACHE_IMG,
                 LOCK_IMG,
@@ -130,6 +131,8 @@ public class ImageServiceImpl implements ImageService {
 
     @Override
     public Image save(Image image) {
+        // 檢查並刪除redis中的資料
+        stringRedisTemplate.delete(CACHE_IMG + image.getId());
         return imageDao.save(image);
     }
 
