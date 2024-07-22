@@ -8,7 +8,9 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import javax.annotation.PreDestroy;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -29,30 +31,40 @@ public class ImageCacheClient {
 
     private final RedisTemplate<String, byte[]> redisTemplateForImage;
     private final StringRedisTemplate stringRedisTemplate;
+    private final TransactionTemplate transactionTemplate;
 
-    public ImageCacheClient(RedisTemplate<String, byte[]> redisTemplateForImage, StringRedisTemplate stringRedisTemplate) {
+    public ImageCacheClient(RedisTemplate<String, byte[]> redisTemplateForImage, StringRedisTemplate stringRedisTemplate, TransactionTemplate transactionTemplate) {
         this.redisTemplateForImage = redisTemplateForImage;
         this.stringRedisTemplate = stringRedisTemplate;
+        this.transactionTemplate = transactionTemplate;
     }
 
     // 圖片緩存工具: 考量將byte[]轉為字串儲存會造成的額外開銷, 選擇單獨實現一個工具類別
     // 緩存策略: 使用邏輯過期 (因為圖片不太會頻繁進行更新 且沒有很高的時效性問題) <- 即讀取到稍微過期的圖片不會有太大的影響
     // 具體實現的細節:　整合互斥鎖方案, 緩存無資料時不會直接返回null, 而是去sql搜尋資料並存入Redis緩存
 
+    // TODO:
+    //  考慮到邏輯過期只在過期後的下次訪問時檢查圖片狀態並更新, 可能會發生有一張圖片在資料庫已經被刪除(或被更新)很久了
+    //  但過期後有好一段時間一直沒人訪問, 可能會出現讓使用者讀取到超久以前圖片的情形, 也許應該對這個情形增加一點對策?
+    //  方案一: 伺服器定期排程更新圖片狀態
+    //  方案二: 對緩存增加一個自然淘汰機制
+    //    設定一個較長的過時間(例如: 24小時), 每次更新緩存時重置
+    //    超過時間無人讀取時, 自然淘汰消失 (有點像是token的儲存機制)
+
     /**
      * 設立不開啟緩存的狀態碼
      *
-     * @param key  key
+     * @param key key
      */
     public void setStatusNoCache(String key) {
         redisTemplateForImage.execute(new SessionCallback<Void>() {
             @Override
             public Void execute(RedisOperations operations) throws DataAccessException {
-                // 開啟事務, 降低網路開銷
+                // 開啟redis事務, 降低網路開銷
                 operations.multi();
                 operations.persist(key);
                 operations.opsForHash().put(key, "data", new byte[]{STATUS_NO_CACHE});
-                operations.opsForHash().delete(key,"mimetype", "expireTime");
+                operations.opsForHash().delete(key, "mimetype", "expireTime");  // 移除狀態碼不需要的欄位, 避免佔用記憶體
                 operations.exec();
                 return null;
             }
@@ -62,17 +74,17 @@ public class ImageCacheClient {
     /**
      * 設立找不到此張圖片的狀態碼
      *
-     * @param key  key
+     * @param key key
      */
     public void setStatusNoImage(String key) {
         redisTemplateForImage.execute(new SessionCallback<Void>() {
             @Override
             public Void execute(RedisOperations operations) throws DataAccessException {
-                // 開啟事務, 降低網路開銷
+                // 開啟redis事務, 降低網路開銷
                 operations.multi();
                 operations.persist(key);
                 operations.opsForHash().put(key, "data", new byte[]{STATUS_NO_IMAGE});
-                operations.opsForHash().delete(key,"mimetype", "expireTime");
+                operations.opsForHash().delete(key, "mimetype", "expireTime");  // 移除狀態碼不需要的欄位, 避免佔用記憶體
                 operations.expire(key, CACHE_IMG_STATUS_TTL, TimeUnit.SECONDS);
                 operations.exec();
                 return null;
@@ -101,7 +113,7 @@ public class ImageCacheClient {
         redisTemplateForImage.execute(new SessionCallback<Void>() {
             @Override
             public Void execute(RedisOperations operations) throws DataAccessException {
-                // 開啟redis事務功能 確保putAll是原子性操作
+                // 開啟redis事務, 確保putAll是原子性操作(主) 並降低網路開銷(副)
                 operations.multi();
                 operations.persist(key);
                 operations.opsForHash().putAll(key, map);
@@ -111,8 +123,26 @@ public class ImageCacheClient {
         });
     }
 
+    // TODO: 考慮之後變成一個執行緒的service接管所有的執行緒配置
     // 更新圖片使用的執行序池
     private static final ExecutorService CACHE_REBUILD_EXECUTOR = Executors.newFixedThreadPool(10);
+
+    @PreDestroy
+    public void shutdownExecutorService() {
+        // 在關閉前, 先結束所有的執行緒工作 (避免jdbc連線未中止的錯誤)
+        CACHE_REBUILD_EXECUTOR.shutdown();
+        try {
+            if (!CACHE_REBUILD_EXECUTOR.awaitTermination(60, TimeUnit.SECONDS)) {
+                CACHE_REBUILD_EXECUTOR.shutdownNow();
+                if (!CACHE_REBUILD_EXECUTOR.awaitTermination(60, TimeUnit.SECONDS)) {
+                    System.err.println("ExecutorService did not terminate");
+                }
+            }
+        } catch (InterruptedException ie) {
+            CACHE_REBUILD_EXECUTOR.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
 
     /**
      * 整合互斥鎖以及邏輯過期方案解決緩存穿透與緩存擊穿, 用於圖片緩存
@@ -173,7 +203,6 @@ public class ImageCacheClient {
                     String mimetype = image.getMimetype();
                     setWithLogicExpire(key, data, mimetype, time, unit);
                 }
-
                 return image;
             } finally {
                 // 確保離開時解鎖
@@ -214,15 +243,12 @@ public class ImageCacheClient {
             // 當查詢到過期時間為null的時候強制視為過期 (實際邏輯上不太可能會發生)
             LocalDateTime expireTime = LocalDateTime.parse(expireString);
 
-            if (expireTime.isBefore(LocalDateTime.now())) {
-                // 資料過期 嘗試獲取同步鎖 開啟新執行緒去更新圖片
-                if (tryLock(lockKey)) {
-                    // TODO: 註解掉開新執行緒就可以正常使用, 理解出問題的原因並嘗試解決
-                    // 其實不開執行緒讓這個拿到鎖的人多等幾毫秒也不是甚麼大問題, 但這樣就不符合我一開始的設計方式
-//                    CACHE_REBUILD_EXECUTOR.submit(() -> {
+            if (expireTime.isBefore(LocalDateTime.now()) && tryLock(lockKey)) {
+                // 資料過期且成功獲取鎖, 開啟新執行緒去更新圖片
+                CACHE_REBUILD_EXECUTOR.submit(() -> {
                     try {
-                        // 查詢資料庫
-                        Image image = dbFallback.apply(id); // TODO: 出問題的位置 也許是開執行緒影響事務管理的因素?
+                        // 查詢資料庫 (新執行緒無法傳遞事務, 手動增加新的事務管理)
+                        Image image = transactionTemplate.execute(status -> dbFallback.apply(id));
                         // 根據查詢結果設計對應的處理方式
                         if (image == null) {
                             // 查詢不到圖片
@@ -239,8 +265,7 @@ public class ImageCacheClient {
                     } finally {
                         unlock(lockKey);
                     }
-//                    });   // TODO: 上面註解掉程式碼的對應括弧 (標記用)
-                }
+                });
             }
 
             // 直接將舊的圖片回傳給客戶端 (因開啟緩存的圖片不具有高一致性要求)
@@ -250,7 +275,6 @@ public class ImageCacheClient {
             return image;
         }
     }
-
 
     private boolean tryLock(String key) {
         Boolean flag = stringRedisTemplate.opsForValue().setIfAbsent(key, "lock", LOCK_TTL, TimeUnit.SECONDS);

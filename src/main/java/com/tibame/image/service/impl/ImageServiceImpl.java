@@ -32,6 +32,7 @@ public class ImageServiceImpl implements ImageService {
     private StringRedisTemplate stringRedisTemplate;
 
     @Override
+    @Transactional(readOnly = true)
     public Image findById(Long id) {
         // 圖片緩存
         return imageCacheClient.queryWithMutexAndLogicExpire(
