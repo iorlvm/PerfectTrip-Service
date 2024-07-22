@@ -39,7 +39,9 @@ public class ImageServiceImpl implements ImageService {
                 CACHE_IMG,
                 LOCK_IMG,
                 id,
-                CACHE_IMG_TTL,
+                CACHE_IMG_DATA_TTL,
+                CACHE_IMG_STATUS_TTL,
+                CACHE_IMG_NATURAL_TTL,
                 TimeUnit.SECONDS,
                 imageDao::findById
         );

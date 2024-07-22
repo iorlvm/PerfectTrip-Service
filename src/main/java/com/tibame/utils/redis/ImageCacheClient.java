@@ -23,8 +23,21 @@ import java.util.function.Function;
 @Slf4j
 @Component
 public class ImageCacheClient {
+    // 圖片緩存工具設計思路:
+    //      考量將byte[]轉為字串儲存會造成的額外開銷, 選擇單獨實現一個工具類別
+    // 緩存策略:
+    //      使用邏輯過期 (因為圖片不太會頻繁進行更新 且沒有很高的時效性問題)
+    // 具體實現的細節:　
+    //      整合互斥鎖方案, 緩存無資料時不會直接返回null, 而是去sql搜尋資料並存入Redis緩存
+    // 更新思路:
+    //      後續考慮到邏輯過期只在過期後的下次訪問時檢查圖片狀態並更新, 可能會發生有一張圖片在資料庫中已經過期很久了
+    //      但過期後有好一段時間一直沒人訪問, 可能會讓使用者讀取到超久以前圖片的情形, 決定對緩存增加一個自然淘汰機制作為對策
+    // 具體實現:
+    //      設定一個較長的過期時間(例如: 30分鐘, 甚至24小時),
+    //      每次更新緩存重置時間, 過期後超過一段時間無人讀取, 自然淘汰消失
+    //      同時避免大量長時間無人讀取的圖片佔用內存
+
     private static final Long LOCK_TTL = 10L;
-    private static final Long CACHE_IMG_STATUS_TTL = 20L;
 
     private final static byte STATUS_NO_CACHE = 0;
     private final static byte STATUS_NO_IMAGE = 1;
@@ -38,18 +51,6 @@ public class ImageCacheClient {
         this.stringRedisTemplate = stringRedisTemplate;
         this.transactionTemplate = transactionTemplate;
     }
-
-    // 圖片緩存工具: 考量將byte[]轉為字串儲存會造成的額外開銷, 選擇單獨實現一個工具類別
-    // 緩存策略: 使用邏輯過期 (因為圖片不太會頻繁進行更新 且沒有很高的時效性問題) <- 即讀取到稍微過期的圖片不會有太大的影響
-    // 具體實現的細節:　整合互斥鎖方案, 緩存無資料時不會直接返回null, 而是去sql搜尋資料並存入Redis緩存
-
-    // TODO:
-    //  考慮到邏輯過期只在過期後的下次訪問時檢查圖片狀態並更新, 可能會發生有一張圖片在資料庫已經被刪除(或被更新)很久了
-    //  但過期後有好一段時間一直沒人訪問, 可能會出現讓使用者讀取到超久以前圖片的情形, 也許應該對這個情形增加一點對策?
-    //  方案一: 伺服器定期排程更新圖片狀態
-    //  方案二: 對緩存增加一個自然淘汰機制
-    //    設定一個較長的過時間(例如: 24小時), 每次更新緩存時重置
-    //    超過時間無人讀取時, 自然淘汰消失 (有點像是token的儲存機制)
 
     /**
      * 設立不開啟緩存的狀態碼
@@ -76,7 +77,7 @@ public class ImageCacheClient {
      *
      * @param key key
      */
-    public void setStatusNoImage(String key) {
+    public void setStatusNoImage(String key, Long statusTTL, TimeUnit unit) {
         redisTemplateForImage.execute(new SessionCallback<Void>() {
             @Override
             public Void execute(RedisOperations operations) throws DataAccessException {
@@ -85,7 +86,7 @@ public class ImageCacheClient {
                 operations.persist(key);
                 operations.opsForHash().put(key, "data", new byte[]{STATUS_NO_IMAGE});
                 operations.opsForHash().delete(key, "mimetype", "expireTime");  // 移除狀態碼不需要的欄位, 避免佔用記憶體
-                operations.expire(key, CACHE_IMG_STATUS_TTL, TimeUnit.SECONDS);
+                operations.expire(key, statusTTL, unit);
                 operations.exec();
                 return null;
             }
@@ -95,14 +96,15 @@ public class ImageCacheClient {
     /**
      * 將數據存到Redis資料庫中 並設立邏輯過期時間 (建立圖片緩存時使用)
      *
-     * @param key      key
-     * @param data     圖片byte陣列
-     * @param mimetype 資料型態
-     * @param time     過期時間
-     * @param unit     時間單位
+     * @param key        key
+     * @param data       圖片byte陣列
+     * @param mimetype   資料型態
+     * @param dataTTL    過期時間
+     * @param naturalTTL 自然淘汰時間
+     * @param unit       時間單位
      */
-    public void setWithLogicExpire(String key, byte[] data, String mimetype, Long time, TimeUnit unit) {
-        LocalDateTime expireTime = LocalDateTime.now().plusSeconds(unit.toSeconds(time));
+    public void setWithLogicExpire(String key, byte[] data, String mimetype, Long dataTTL, Long naturalTTL, TimeUnit unit) {
+        LocalDateTime expireTime = LocalDateTime.now().plusSeconds(unit.toSeconds(dataTTL));
         String expireTimeStr = String.valueOf(expireTime);
 
         Map<String, byte[]> map = new HashMap<>();
@@ -117,6 +119,7 @@ public class ImageCacheClient {
                 operations.multi();
                 operations.persist(key);
                 operations.opsForHash().putAll(key, map);
+                if (naturalTTL > 0) operations.expire(key, naturalTTL, unit);
                 operations.exec();
                 return null;
             }
@@ -147,15 +150,26 @@ public class ImageCacheClient {
     /**
      * 整合互斥鎖以及邏輯過期方案解決緩存穿透與緩存擊穿, 用於圖片緩存
      *
-     * @param keyPrefix  key的前綴 (與id組成完整的物件key)
-     * @param lockPrefix lock的前綴 (與id組成完整鎖key)
-     * @param id         物件id
-     * @param time       時間
-     * @param unit       時間單位
-     * @param dbFallback 當Redis查詢失敗後, 搜尋SQL的函式
+     * @param keyPrefix     key的前綴 (與id組成完整的物件key)
+     * @param lockPrefix    lock的前綴 (與id組成完整鎖key)
+     * @param id            物件id
+     * @param dataTTL       資料過期時間
+     * @param statusTTL     狀態過期時間
+     * @param naturalTTL    自然淘汰時間
+     * @param unit          時間單位
+     * @param dbFallback    當Redis查詢失敗後, 搜尋SQL的函式
      * @return 查詢結果
      */
-    public Image queryWithMutexAndLogicExpire(String keyPrefix, String lockPrefix, Long id, Long time, TimeUnit unit, Function<Long, Image> dbFallback) {
+    public Image queryWithMutexAndLogicExpire(
+            String keyPrefix,
+            String lockPrefix,
+            Long id,
+            Long dataTTL,
+            Long statusTTL,
+            Long naturalTTL,
+            TimeUnit unit,
+            Function<Long, Image> dbFallback
+    ) {
         String key = keyPrefix + id;
         String lockKey = lockPrefix + id;
 
@@ -181,7 +195,7 @@ public class ImageCacheClient {
             if (data != null) {
                 // 確認緩存已被重建, 遞迴一次自己 (因確定 data != null, 所以不會變成無限遞迴)
                 unlock(lockKey);
-                return queryWithMutexAndLogicExpire(keyPrefix, lockPrefix, id, time, unit, dbFallback);
+                return queryWithMutexAndLogicExpire(keyPrefix, lockPrefix, id, dataTTL, statusTTL, naturalTTL, unit, dbFallback);
             }
 
             try {
@@ -192,7 +206,7 @@ public class ImageCacheClient {
                     // 曾經考慮過不設定過期時間, 並在圖片上傳時檢查redis是否有對應id的狀態碼 (如果有就刪除)
                     // 但考量到有風險, 還是決定使用一般過期時間的策略儲存狀態 (也許可以設定較長的過期時間?)
                     // 風險: 因為後續系統都不會二次call資料庫檢查狀態 可能會變成後來有這張圖但redis一直以為沒有
-                    setStatusNoImage(key);
+                    setStatusNoImage(key, statusTTL, TimeUnit.SECONDS);
                 } else if (!image.isCacheEnabled()) {
                     // 查詢到資料 但不開啟緩存  將狀態碼存入redis緩存 (避免每次讀取不緩存的圖片都需要排隊讀取)
                     // 這個狀態不設定過期時間, 下方db查詢回傳前檢查緩存狀態是否更改
@@ -201,7 +215,7 @@ public class ImageCacheClient {
                     // 查詢到資料 且開啟緩存機制, 將資料存入redis緩存
                     data = image.getData();
                     String mimetype = image.getMimetype();
-                    setWithLogicExpire(key, data, mimetype, time, unit);
+                    setWithLogicExpire(key, data, mimetype, dataTTL, naturalTTL, unit);
                 }
                 return image;
             } finally {
@@ -219,14 +233,14 @@ public class ImageCacheClient {
                     // 回傳前重新確認圖片狀態與緩存設定
                     if (image == null) {
                         // 找不到這張圖片(可能被刪除, 但因為某些因素redis資料沒有同步刪掉狀態碼), 修改原本的狀態碼
-                        setStatusNoImage(key);
+                        setStatusNoImage(key, statusTTL, TimeUnit.SECONDS);
                     } else if (image.isCacheEnabled()) {
                         // 緩存狀態變為開啟, 嘗試獲取鎖
                         if (tryLock(lockKey)) {
                             // 獲取鎖成功, 將資料存入redis緩存
                             data = image.getData();
                             String mimetype = image.getMimetype();
-                            setWithLogicExpire(key, data, mimetype, time, unit);
+                            setWithLogicExpire(key, data, mimetype, dataTTL, naturalTTL, unit);
                             unlock(lockKey);
                         }
                         // 沒獲取到鎖, 表示有其他人已經在重建緩存了 (不需要做任何事情)
@@ -252,13 +266,13 @@ public class ImageCacheClient {
                         // 根據查詢結果設計對應的處理方式
                         if (image == null) {
                             // 查詢不到圖片
-                            setStatusNoImage(key);
+                            setStatusNoImage(key, statusTTL, TimeUnit.SECONDS);
                         } else if (!image.isCacheEnabled()) {
                             // 圖片緩存狀態改為關閉
                             setStatusNoCache(key);
                         } else {
                             // 更新圖片的緩存資料
-                            setWithLogicExpire(key, image.getData(), image.getMimetype(), time, unit);
+                            setWithLogicExpire(key, image.getData(), image.getMimetype(), dataTTL, naturalTTL, unit);
                         }
                     } catch (Exception e) {
                         throw new RuntimeException(e);
