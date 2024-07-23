@@ -4,7 +4,7 @@ import com.tibame.dto.ImageUploadRequest;
 import com.tibame.entity.Image;
 import com.tibame.image.dao.ImageDao;
 import com.tibame.image.service.ImageService;
-import com.tibame.utils.basic.ImageUtils;
+import com.tibame.utils.basic.ImageUtil;
 import com.tibame.utils.redis.ImageCacheClient;
 import com.tibame.utils.redis.RedisIdWorker;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -83,7 +83,7 @@ public class ImageServiceImpl implements ImageService {
             }
 
             byte[] data = file.getBytes();
-            BufferedImage bufferedImage = ImageUtils.getBufferedImage(data);
+            BufferedImage bufferedImage = ImageUtil.getBufferedImage(data);
 
             // 無設定是否進行圖片壓縮的情形
             if (resizeEnabled == null) {
@@ -107,7 +107,7 @@ public class ImageServiceImpl implements ImageService {
 
             // 進行圖片壓縮
             if (resizeEnabled) {
-                data = ImageUtils.resizeImage(bufferedImage, width, height, 0.85f);
+                data = ImageUtil.resizeImage(bufferedImage, width, height, 0.85f);
                 contentType = "image/jpeg";
             }
 

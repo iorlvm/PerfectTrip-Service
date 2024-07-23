@@ -1,13 +1,10 @@
 package com.tibame.entity;
 
 import lombok.Data;
-import lombok.Getter;
 
 import javax.persistence.*;
 import java.io.Serializable;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
+import java.time.LocalDateTime;
 
 @Data
 @Entity
@@ -32,12 +29,11 @@ public class Image implements Serializable {
     @Column(name = "cache_enabled", nullable = false)
     private boolean cacheEnabled = false;
 
-    @Temporal(TemporalType.TIMESTAMP)
     @Column(
             name = "created_at",
             nullable = false,
             insertable = false,
             updatable = false
     )
-    private Date createdAt;
+    private LocalDateTime createdAt;
 }

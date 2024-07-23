@@ -11,7 +11,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Iterator;
 
-public class ImageUtils {
+public class ImageUtil {
     public static BufferedImage getBufferedImage(byte[] data) throws IOException {
         return ImageIO.read(new ByteArrayInputStream(data));
     }
