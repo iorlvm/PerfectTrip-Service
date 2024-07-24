@@ -36,8 +36,8 @@ public class ImageUtil {
         double scale = Math.max((double) targetWidth / originalWidth, (double) targetHeight / originalHeight);
 
         // 計算縮放圖片的寬高
-        int scaledWidth = (int) (scale * originalWidth);
-        int scaledHeight = (int) (scale * originalHeight);
+        int scaledWidth = (int) Math.ceil(scale * originalWidth);
+        int scaledHeight = (int) Math.ceil(scale * originalHeight);
 
         BufferedImage scaledImage = new BufferedImage(scaledWidth, scaledHeight, BufferedImage.TYPE_INT_RGB);
         Graphics2D graphics = scaledImage.createGraphics();

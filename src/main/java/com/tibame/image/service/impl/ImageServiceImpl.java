@@ -20,7 +20,6 @@ import java.util.concurrent.TimeUnit;
 import static com.tibame.utils.redis.RedisConstants.*;
 
 @Service
-@Transactional
 public class ImageServiceImpl implements ImageService {
     @Autowired
     private ImageDao imageDao;
@@ -133,6 +132,7 @@ public class ImageServiceImpl implements ImageService {
     }
 
     @Override
+    @Transactional
     public Image save(Image image) {
         // 檢查並刪除redis中的資料
         stringRedisTemplate.delete(CACHE_IMG + image.getId());
@@ -140,6 +140,7 @@ public class ImageServiceImpl implements ImageService {
     }
 
     @Override
+    @Transactional
     public void deleteById(Long id) {
         imageDao.deleteById(id);
     }
