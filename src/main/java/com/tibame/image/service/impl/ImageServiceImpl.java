@@ -17,7 +17,7 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 
-import static com.tibame.utils.redis.RedisConstants.*;
+import static com.tibame.utils.Constants.*;
 
 @Service
 public class ImageServiceImpl implements ImageService {
@@ -94,7 +94,7 @@ public class ImageServiceImpl implements ImageService {
                     width = 1600;
                     resizeEnabled = true;
                 } else if (bufferedImage.getHeight() > 900) {
-                    // 寬度超過900, 進行壓縮
+                    // 高度超過900, 進行壓縮
                     height = 900;
                     resizeEnabled = true;
                 } else {
