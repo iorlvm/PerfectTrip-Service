@@ -7,6 +7,7 @@ import org.springframework.context.annotation.*;
 import org.springframework.orm.hibernate5.HibernateTransactionManager;
 import org.springframework.orm.hibernate5.LocalSessionFactoryBean;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import javax.sql.DataSource;
 
@@ -58,5 +59,11 @@ public class DBConfig {
         HibernateTransactionManager transactionManager = new HibernateTransactionManager();
         transactionManager.setSessionFactory(sessionFactoryBean.getObject());
         return transactionManager;
+    }
+
+    @Bean
+    public TransactionTemplate transactionTemplate(HibernateTransactionManager transactionManager) {
+        // 目前專案只使用了Hibernate, 所以交易控制範本就使用了Hibernate的管理器做為設定 (如果之後有混用MyBatis的話, 可能需要修正)
+        return new TransactionTemplate(transactionManager);
     }
 }

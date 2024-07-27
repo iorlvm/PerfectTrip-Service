@@ -4,7 +4,8 @@ import com.tibame.dto.ImageUploadRequest;
 import com.tibame.entity.Image;
 import com.tibame.image.dao.ImageDao;
 import com.tibame.image.service.ImageService;
-import com.tibame.utils.basic.ImageUtils;
+import com.tibame.utils.basic.ImageUtil;
+import com.tibame.utils.redis.ImageCacheClient;
 import com.tibame.utils.redis.RedisIdWorker;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -14,22 +15,35 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
-import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
-import static com.tibame.utils.redis.RedisConstants.CACHE_IMG_SIZE;
+import static com.tibame.utils.Constants.*;
 
 @Service
-@Transactional
 public class ImageServiceImpl implements ImageService {
     @Autowired
     private ImageDao imageDao;
     @Autowired
     private RedisIdWorker idWorker;
+    @Autowired
+    private ImageCacheClient imageCacheClient;
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
 
     @Override
+    @Transactional(readOnly = true)
     public Image findById(Long id) {
-        // TODO: 圖片緩存
-        return imageDao.findById(id);
+        // 圖片緩存
+        return imageCacheClient.queryWithMutexAndLogicExpire(
+                CACHE_IMG,
+                LOCK_IMG,
+                id,
+                CACHE_IMG_DATA_TTL,
+                CACHE_IMG_STATUS_TTL,
+                CACHE_IMG_NATURAL_TTL,
+                TimeUnit.SECONDS,
+                imageDao::findById
+        );
     }
 
     @Override
@@ -68,7 +82,7 @@ public class ImageServiceImpl implements ImageService {
             }
 
             byte[] data = file.getBytes();
-            BufferedImage bufferedImage = ImageUtils.getBufferedImage(data);
+            BufferedImage bufferedImage = ImageUtil.getBufferedImage(data);
 
             // 無設定是否進行圖片壓縮的情形
             if (resizeEnabled == null) {
@@ -80,7 +94,7 @@ public class ImageServiceImpl implements ImageService {
                     width = 1600;
                     resizeEnabled = true;
                 } else if (bufferedImage.getHeight() > 900) {
-                    // 寬度超過900, 進行壓縮
+                    // 高度超過900, 進行壓縮
                     height = 900;
                     resizeEnabled = true;
                 } else {
@@ -92,7 +106,7 @@ public class ImageServiceImpl implements ImageService {
 
             // 進行圖片壓縮
             if (resizeEnabled) {
-                data = ImageUtils.resizeImage(bufferedImage, width, height, 0.85f);
+                data = ImageUtil.resizeImage(bufferedImage, width, height, 0.85f);
                 contentType = "image/jpeg";
             }
 
@@ -118,11 +132,15 @@ public class ImageServiceImpl implements ImageService {
     }
 
     @Override
+    @Transactional
     public Image save(Image image) {
+        // 檢查並刪除redis中的資料
+        stringRedisTemplate.delete(CACHE_IMG + image.getId());
         return imageDao.save(image);
     }
 
     @Override
+    @Transactional
     public void deleteById(Long id) {
         imageDao.deleteById(id);
     }

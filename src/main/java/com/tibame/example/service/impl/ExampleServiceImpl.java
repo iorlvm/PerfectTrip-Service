@@ -32,17 +32,18 @@ public class ExampleServiceImpl implements ExampleService {
     @Override
     public ExampleEntity getById(Long id) {
         // Redis緩存工具測試
-        ExampleEntity user = cacheClient.queryWithMutex(
+        ExampleEntity user = cacheClient.queryWithMutexAndLogicExpire(
                 "cache:user:",
                 "lock:user:",
                 id,
                 ExampleEntity.class,
                 60L,
+                30L,
+                1800L,
                 TimeUnit.SECONDS,
                 userDao::findById
         );
 
-        // 回傳值是單一物件的情況
         return user;
     }
 
