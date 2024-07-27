@@ -8,7 +8,6 @@ import org.springframework.web.servlet.HandlerInterceptor;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.HttpSession;
 
 @Component
 public class TokenParsingInterceptor implements HandlerInterceptor {
@@ -25,9 +24,6 @@ public class TokenParsingInterceptor implements HandlerInterceptor {
             UserAuth userAuth = tokenService.validateToken(token);
             if (userAuth != null) {
                 tokenService.flashLoginExpire(token);
-                HttpSession session =  request.getSession();
-                session.setAttribute("username", userAuth.getUsername());
-                session.setAttribute("userRole", userAuth.getRole());
             }
         }
 

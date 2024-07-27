@@ -1,9 +1,16 @@
 package com.tibame.config;
 
+import io.lettuce.core.ReadFrom;
+import io.lettuce.core.resource.ClientResources;
+import io.lettuce.core.resource.DefaultClientResources;
+import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.RedisSentinelConfiguration;
 import org.springframework.data.redis.connection.jedis.JedisConnectionFactory;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import org.springframework.data.redis.connection.lettuce.LettucePoolingClientConfiguration;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
@@ -29,20 +36,45 @@ public class RedisConfig {
     @Value("${redis.pool.maxTotal}")
     private int maxTotal;
 
+    @Value("${redis.cluster.password}")
+    private String clusterPassword;
+    @Value("${redis.cluster.nodes}")
+    private String clusterNodes;
+
 
 
     @Bean
     public RedisConnectionFactory redisConnectionFactory() {
-        JedisConnectionFactory jedisConnectionFactory = new JedisConnectionFactory();
-        jedisConnectionFactory.setHostName(hostname);
-        jedisConnectionFactory.setPort(port);
-        jedisConnectionFactory.setPassword(password);
-        jedisConnectionFactory.setDatabase(database);
-        jedisConnectionFactory.getPoolConfig().setMaxIdle(maxIdle);
-        jedisConnectionFactory.getPoolConfig().setMinIdle(minIdle);
-        jedisConnectionFactory.getPoolConfig().setMaxWaitMillis(maxWaitMillis);
-        jedisConnectionFactory.getPoolConfig().setMaxTotal(maxTotal);
-        return jedisConnectionFactory;
+        String[] nodes = clusterNodes.split(",");
+        RedisSentinelConfiguration sentinelConfig = new RedisSentinelConfiguration()
+                .master("redis-master");
+
+        for (String node:nodes) {
+            sentinelConfig.sentinel(hostname,Integer.parseInt(node));
+        }
+
+        LettucePoolingClientConfiguration lettucePoolConfig = LettucePoolingClientConfiguration.builder()
+                .poolConfig(createPoolConfig())
+                .readFrom(ReadFrom.REPLICA_PREFERRED)
+                .build();
+
+        LettuceConnectionFactory lettuceConnectionFactory = new LettuceConnectionFactory(sentinelConfig, lettucePoolConfig);
+        lettuceConnectionFactory.setPassword(clusterPassword);
+        return lettuceConnectionFactory;
+    }
+
+    private GenericObjectPoolConfig<?> createPoolConfig() {
+        GenericObjectPoolConfig<?> poolConfig = new GenericObjectPoolConfig<>();
+        poolConfig.setMaxIdle(maxIdle);
+        poolConfig.setMinIdle(minIdle);
+        poolConfig.setMaxWaitMillis(maxWaitMillis);
+        poolConfig.setMaxTotal(maxTotal);
+        return poolConfig;
+    }
+
+    @Bean
+    public ClientResources clientResources() {
+        return DefaultClientResources.create();
     }
 
 
